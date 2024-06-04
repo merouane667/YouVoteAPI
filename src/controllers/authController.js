@@ -62,7 +62,7 @@ exports.registerUser = async (req, res) => {
 
     // Send the verification email
     const mailOptions = {
-      from: 'your_email@gmail.com',
+      from: 'youvote7@gmail.com',
       to: email,
       subject: 'YouVote Email Verification Code',
       text: `Welcome to YouVote, ${firstName} ${lastName}!\n\nThank you for registering on our platform. To complete your registration, please verify your email address by entering the following verification code in the app:\n\nVerification Code: ${verificationCode}\n\nIf you did not request this code, please ignore this email.\n\nBest regards,\nThe YouVote Team`,
