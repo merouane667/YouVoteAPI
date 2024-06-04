@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const { secretKey } = require('../config');
 const Election = require('../models/electionModel');
 const Vote = require('../models/voteModel');
-const User = require('../models/userModel'); // Import User model
+const User = require('../models/userModel');
 
 // Create a new election
 exports.createElection = async (req, res) => {

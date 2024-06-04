@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { secretKey } = require('../config');
 const Candidate = require('../models/candidateModel');
-const User = require('../models/userModel'); // Import User model
+const User = require('../models/userModel');
 
 // Controller for getting all candidates of a specific election
 exports.getCandidatesByElection = async (req, res) => {
@@ -54,7 +54,7 @@ exports.addCandidateToElection = async (req, res) => {
     await newCandidate.save();
     res.status(201).json({ message: 'Candidate added successfully', candidate: newCandidate });
   } catch (error) {
-    res.status  .json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
