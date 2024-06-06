@@ -4,6 +4,7 @@ const candidateController = require('../controllers/candidateController');
 const voteController = require('../controllers/voteController');
 const electionController = require('../controllers/electionController');
 const router = express.Router();
+const { authenticateUser } = require('../middleware/authMiddleware');
 
 // User routes
 router.post('/register', authController.registerUser);
@@ -12,20 +13,20 @@ router.post('/login', authController.login);
 router.post('/validate-login', authController.validateLogin);
 
 // Election routes
-router.post('/elections', electionController.createElection);
-router.get('/elections', electionController.getAllElections);
-router.get('/elections/:id', electionController.getElectionById);
-router.put('/elections/:id', electionController.updateElection);
-router.delete('/elections/:id', electionController.deleteElection);
-router.get('/elections/:electionId/results', electionController.getElectionResults);
+router.post('/elections', authenticateUser, electionController.createElection);
+router.get('/elections', authenticateUser, electionController.getAllElections);
+router.get('/elections/:id', authenticateUser, electionController.getElectionById);
+router.put('/elections/:id', authenticateUser, electionController.updateElection);
+router.delete('/elections/:id', authenticateUser, electionController.deleteElection);
+router.get('/elections/:electionId/results', authenticateUser, electionController.getElectionResults);
 
 // Candidate routes
-router.post('/candidates/:electionId', candidateController.addCandidateToElection);
-router.get('/candidates/:electionId', candidateController.getCandidatesByElection);
-router.put('/candidates/:electionId/:candidateId', candidateController.updateCandidateInElection);
-router.delete('/candidates/:electionId/:candidateId', candidateController.deleteCandidateFromElection);
+router.post('/candidates/:electionId', authenticateUser, candidateController.addCandidateToElection);
+router.get('/candidates/:electionId', authenticateUser, candidateController.getCandidatesByElection);
+router.put('/candidates/:electionId/:candidateId', authenticateUser, candidateController.updateCandidateInElection);
+router.delete('/candidates/:electionId/:candidateId', authenticateUser, candidateController.deleteCandidateFromElection);
 
 // Vote routes
-router.post('/votes', voteController.vote);
+router.post('/votes', authenticateUser, voteController.vote);
 
 module.exports = router;
