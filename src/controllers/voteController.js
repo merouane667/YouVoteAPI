@@ -1,14 +1,41 @@
 const jwt = require('jsonwebtoken');
-const { secretKey } = require('../config');
+const { privateKey1, privateKey2, secretKey } = require('../config');
 const Vote = require('../models/voteModel');
 const User = require('../models/userModel');
+const mongoose = require('mongoose');
+const crypto = require('crypto');
 
-// Controller for casting a vote
+// Helper function to create a composite key from two private keys
+function createCompositeKey(key1, key2) {
+  if (!key1 || !key2) {
+    throw new Error('Private keys must be defined');
+  }
+
+  // Concatenate the two keys and generate a composite key using SHA-256
+  const compositeKey = crypto.createHash('sha256').update(key1 + key2).digest('hex');
+  return compositeKey.slice(0, 64); // 64 hexadecimal characters = 32 bytes = 256 bits
+}
+
+// Helper function to encrypt data with a given key
+function encryptWithKey(data, key) {
+  const iv = crypto.randomBytes(16); // Generate a random IV for each encryption operation
+  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(key, 'hex'), iv);
+  let encrypted = cipher.update(data, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return { encryptedData: encrypted, iv: iv.toString('hex') };
+}
+
+// Controller for submitting a vote
 exports.vote = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
   try {
     // Verify JWT token
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(401).json({ error: 'Access denied, token missing' });
     }
 
@@ -16,8 +43,10 @@ exports.vote = async (req, res) => {
     const userEmail = decoded.email;
 
     // Check if the user is an admin
-    const user = await User.findOne({ email: userEmail });
+    const user = await User.findOne({ email: userEmail }).session(session);
     if (user.role === 'admin') {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(403).json({ error: 'Admins are not allowed to vote' });
     }
 
@@ -25,21 +54,44 @@ exports.vote = async (req, res) => {
     const { election, candidate } = req.body;
 
     // Check if the user has already voted for the specified election
-    const existingVote = await Vote.findOne({ user: userEmail, election });
+    const existingVote = await Vote.findOne({ user: userEmail }).session(session);
     if (existingVote) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ error: 'You have already voted for this election' });
     }
 
-    // Create new vote object
-    const vote = new Vote({ user: userEmail, election, candidate });
+    // Create the vote data
+    const voteData = JSON.stringify({ user: userEmail, election, candidate });
 
-    // Save vote to database
-    await vote.save();
+    // Create a composite key from the two private keys
+    const compositeKey = createCompositeKey(privateKey1, privateKey2);
+
+    // Encrypt the vote data with the composite key
+    const { encryptedData, iv } = encryptWithKey(voteData, compositeKey);
+
+    // Create a new vote object with the encrypted data and IV
+    const vote = new Vote({
+      user: userEmail,
+      encryptedVote: encryptedData,
+      iv: iv, // Store the IV used for later decryption
+    });
+
+    // Save the vote to the database
+    await vote.save({ session });
+
+    // Commit the transaction
+    await session.commitTransaction();
+    session.endSession();
 
     // Send response
     res.status(201).json({ message: 'Vote made successfully', vote });
   } catch (error) {
-    console.error(error);  // Log the error for debugging
+    // Abort the transaction in case of an error
+    await session.abortTransaction();
+    session.endSession();
+
+    console.error(error); // Log the error for debugging
     res.status(500).json({ error: 'Internal server error' });
   }
 };

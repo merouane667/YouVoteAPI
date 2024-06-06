@@ -1,8 +1,10 @@
 const jwt = require('jsonwebtoken');
-const { secretKey } = require('../config');
+const { privateKey1, privateKey2, secretKey } = require('../config');
 const Election = require('../models/electionModel');
 const Vote = require('../models/voteModel');
 const User = require('../models/userModel'); // Import User model
+const crypto = require('crypto');
+const secrets = require('secrets.js-grempe');
 
 // Create a new election
 exports.createElection = async (req, res) => {
@@ -148,6 +150,25 @@ exports.deleteElection = async (req, res) => {
   }
 };
 
+// Helper function to create a composite key from two private keys
+function createCompositeKey(key1, key2) {
+  if (!key1 || !key2) {
+    throw new Error('Private keys must be defined');
+  }
+
+  // Concatenate the two keys and generate a composite key using SHA-256
+  const compositeKey = crypto.createHash('sha256').update(key1 + key2).digest('hex');
+  return compositeKey.slice(0, 64); // 64 hexadecimal characters = 32 bytes = 256 bits
+}
+
+// Helper function to decrypt data with a given key
+function decryptWithKey(encryptedData, key, iv) {
+  const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key, 'hex'), Buffer.from(iv, 'hex'));
+  let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
+
 // Controller for getting election results
 exports.getElectionResults = async (req, res) => {
   try {
@@ -166,27 +187,38 @@ exports.getElectionResults = async (req, res) => {
 
     const { electionId } = req.params;
 
-    // Check if election exists
+    // Check if the election exists
     const election = await Election.findById(electionId);
     if (!election) {
       return res.status(404).json({ error: 'Election not found' });
     }
 
-    // Fetch votes and populate candidate information
-    const votes = await Vote.find({ election: electionId }).populate('candidate');
+    // Fetch votes
+    const votes = await Vote.find();
 
     // Check if there are no votes
     if (votes.length === 0) {
       return res.status(200).json({ message: 'No votes cast for this election yet.' });
     }
 
-    // Aggregate results
+    // Create a composite key from the two private keys
+    const compositeKey = createCompositeKey(privateKey1, privateKey2);
+
+    // Decrypt votes and aggregate results
     const results = votes.reduce((acc, vote) => {
-      const candidateId = vote.candidate._id.toString();
-      if (!acc[candidateId]) {
-        acc[candidateId] = { candidate: vote.candidate, count: 0 };
+      try {
+        const decryptedVoteData = decryptWithKey(vote.encryptedVote, compositeKey, vote.iv);
+        const { election, candidate } = JSON.parse(decryptedVoteData);
+
+        if (election !== electionId) return acc;
+
+        if (!acc[candidate]) {
+          acc[candidate] = { candidate, count: 0 };
+        }
+        acc[candidate].count += 1;
+      } catch (error) {
+        console.error('Error decrypting vote:', error);
       }
-      acc[candidateId].count += 1;
       return acc;
     }, {});
 
@@ -195,7 +227,7 @@ exports.getElectionResults = async (req, res) => {
 
     res.status(200).json(resultsArray);
   } catch (error) {
-    console.error(error);  // Log the error for debugging
+    console.error(error); // Log the error for debugging
     res.status(500).json({ error: 'Internal server error' });
   }
 };

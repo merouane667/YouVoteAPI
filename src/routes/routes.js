@@ -7,8 +7,9 @@ const router = express.Router();
 
 // User routes
 router.post('/register', authController.registerUser);
-router.post('/verifyUser', authController.verifyUser);
-router.post('/login', authController.loginUser);
+router.post('/verify', authController.verify);
+router.post('/login', authController.login);
+router.post('/validate-login', authController.validateLogin);
 
 // Election routes
 router.post('/elections', electionController.createElection);
